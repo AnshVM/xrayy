@@ -228,6 +228,94 @@ export function RawStage(label: string) {
   }
 }
 
+export function RankingStage(label: string, options: {id: string}) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      const capturedParams: ParamCaptures = Reflect.getMetadata('xray:captures', target, propertyKey) || [];
+      let input: any = {};
+
+      for (const capturedParam of capturedParams) {
+        if(capturedParam.type === 'candidates') continue;
+        input[capturedParam.name] = args[capturedParam.index];
+      }
+
+      const inputCandidateParam = capturedParams.find(param => param.type === 'candidates');
+      if(!inputCandidateParam) {
+        throw Error('Ranking step must have a param with @Candidates');
+      }
+      const inputCandidateIndex = inputCandidateParam?.index;
+      const rawCandidates = args[inputCandidateIndex];
+
+      const inputCandidates = validateAndConvertCandidateInput(rawCandidates, options.id);
+
+      const startedAt = Date.now();
+
+      try {
+        const output = await originalMethod.apply(this, args);
+
+        if(!Array.isArray(output)) {
+          throw Error('Ranking stage output must be an array');
+        }
+
+        const rankedCandidates = validateAndConvertCandidateInput(output, options.id);
+
+        const finishedAt = Date.now();
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+
+        const stage: Stage = {
+          type: 'ranking',
+          label,
+          status: 'success',
+          startedAt,
+          finishedAt,
+          input: {
+            candidates: inputCandidates 
+          },
+          output: {
+            candidates: rankedCandidates
+          }
+        };
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+
+        return output;
+      } catch (err) {
+        const finishedAt = Date.now();
+
+        const stage: Stage = {
+          type: 'ranking',
+          label,
+          status: 'failure',
+          error: {
+            message: String(err)
+          },
+          startedAt,
+          finishedAt,
+          input: {
+            candidates: input
+          },
+          output: {
+            candidates: []
+          }
+        };
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+        throw err;
+      }
+    }
+
+    return descriptor;
+  }
+}
 export function GenerationStage(label: string, options: {reason?:string}) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
@@ -584,6 +672,8 @@ export function FilteringStage(label: string, options: { id: string, passed: str
     return descriptor;
   };
 }
+
+
 
 export function Entrypoint() {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
