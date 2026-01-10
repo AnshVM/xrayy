@@ -7,8 +7,8 @@ export type FilteredCandidate = {
   candidate: any;
   id: string | number;
   passed: boolean;
-  reasonLabel?: string | undefined;
-  reasonText?: string | undefined;
+  reasonLabel: string | undefined;
+  reasonText: string | undefined;
 };
 
 export type ScoredCandidate = {
@@ -16,6 +16,11 @@ export type ScoredCandidate = {
   id: string | number;
   score: number;
 };
+
+export type GeneratedCandidate = {
+  candidate: any;
+  reasonText: string | undefined;
+}
 
 export interface Stage {
   type: 'retrieval' | 'scoring' | 'filtering' | 'generation' | 'ranking' | 'raw';
@@ -46,9 +51,6 @@ export interface Stage {
 
     scoredCandidates?: ScoredCandidate[];
 
-    generatedCandidates?: {
-      candidate: any;
-      reasonText?: string;
-    }[];
-  };
+    generatedCandidates?: GeneratedCandidate[];
+  }
 }

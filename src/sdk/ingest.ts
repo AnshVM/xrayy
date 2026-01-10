@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import type { Stage, Candidate, ScoredCandidate, FilteredCandidate } from './types.js';
+import type { Stage, Candidate, ScoredCandidate, FilteredCandidate, GeneratedCandidate } from './types.js';
 import type { Pipeline } from './pipeline.js';
 import { sendPipeline } from './api.js';
 
@@ -97,12 +97,12 @@ export function validateAndConvertFilteredCandidates(
   options: {
     passed: string,
     id: string,
-    reasonLabelField?: string,
-    reasonTextField?: string
+    reasonLabel?: string,
+    reasonText?: string
   }
 ): Array<FilteredCandidate> {
 
-  const {passed: passedField, id: idField, reasonLabelField, reasonTextField} =  options;
+  const {passed: passedField, id: idField, reasonLabel: reasonLabelField, reasonText: reasonTextField} =  options;
 
   if (!Array.isArray(input)) {
     throw Error('Filtered candidate input must be an array.');
@@ -228,6 +228,92 @@ export function RawStage(label: string) {
   }
 }
 
+export function GenerationStage(label: string, options: {reason?:string}) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      const capturedParams: ParamCaptures = Reflect.getMetadata('xray:captures', target, propertyKey) || [];
+      let input: any = {};
+
+      for (const capturedParam of capturedParams) {
+        input[capturedParam.name] = args[capturedParam.index];
+      }
+
+      const startedAt = Date.now();
+
+      try {
+        const output = await originalMethod.apply(this, args);
+        const finishedAt = Date.now();
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+
+        const generatedCandidates: GeneratedCandidate[] = output.map((candidate: any) => {
+          let reasonText = undefined; 
+          if(options.reason) {
+            if(!(options.reason in candidate)) {
+              throw Error(`Missing field ${options.reason} in Generation Candidate.`);
+            }
+            reasonText = candidate[options.reason];
+          }
+
+          return {
+            candidate: candidate,
+            reasonText: reasonText
+          }
+        });
+
+        const stage: Stage = {
+          type: 'generation',
+          label,
+          status: 'success',
+          startedAt,
+          finishedAt,
+          input: {
+            any: input
+          },
+          output: {
+            generatedCandidates
+          } 
+        }
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+
+        return output;
+      } catch (err) {
+        const finishedAt = Date.now();
+
+        const stage: Stage = {
+          type: 'generation',
+          label,
+          status: 'failure',
+          error: {
+            message: String(err)
+          },
+          startedAt,
+          finishedAt,
+          input: {
+            any: input
+          },
+          output: {
+            generatedCandidates: []
+          }
+        };
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+        throw err;
+      }
+    }
+
+    return descriptor;
+  }
+}
 export function RetrievalStage(label: string, options: { id: string }) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;

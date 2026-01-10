@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Candidates, Entrypoint, FilteringStage, Pipeline, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
+import { Candidates, Entrypoint, FilteringStage, GenerationStage, Pipeline, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
 
 @Pipeline('somepipeline')
 class SomePipeline {
@@ -10,6 +10,7 @@ class SomePipeline {
     const candidates = await this.retrieve(a);
     const scored = await this.score(candidates as any[]);
     const filtered = await this.filter(scored);
+    const gen = this.generation(filtered);
     console.log('scored', scored);
   }
 
@@ -53,9 +54,14 @@ class SomePipeline {
         scoreField: candidate.scorefield,
         document: candidate.document,
         passed: candidate.scorefield > 0.5,
-        reasonLabel: candidate.scorefield > 0.5 ? 'high enough' : 'very low'
+        reason: candidate.scorefield > 0.5 ? 'high enough' : 'very low'
       }
     }) 
+  }
+
+  @GenerationStage('generation', {reason: 'reason'})
+  generation(@RawInput('candidates') candidates: {document: string, reason: string}[]) {
+    return candidates;
   }
 }
 
