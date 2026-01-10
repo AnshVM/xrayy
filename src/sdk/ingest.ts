@@ -94,7 +94,6 @@ export function RawStage(label: string) {
 }
 
 export function RetrievalStage(label: string) {
-
   return function(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
@@ -118,8 +117,8 @@ export function RetrievalStage(label: string) {
           throw Error('Output for Retrieval Stage must be an array.');
         }
 
-        const candidates: Candidate[] = result.map((c: any) => {
-          return { candidate: c } as Candidate;
+        const candidates: Candidate[] = result.map((c: any, id: number) => {
+          return { candidate: c, id } as Candidate;
         });
 
         const stage: Stage = {

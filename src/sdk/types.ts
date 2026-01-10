@@ -2,10 +2,12 @@ import mongoose, { Schema, Types, Document } from 'mongoose';
 
 export type Candidate = {
   candidate: any;
+  id: string | number;
 };
 
 export type FilteredCandidate = {
   candidate: any;
+  id: string | number;
   passed: boolean;
   reasonLabel?: string;
   reasonText?: string;
@@ -13,11 +15,12 @@ export type FilteredCandidate = {
 
 export type ScoredCandidate = {
   candidate: any;
+  id: string | number;
   score: number;
 };
 
 export interface Stage {
-  type: 'retrieval' | 'scoring' | 'filtering' | 'generation' | 'raw';
+  type: 'retrieval' | 'scoring' | 'filtering' | 'generation' | 'ranking' | 'raw';
 
   label: string;
 
