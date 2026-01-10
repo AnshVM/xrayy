@@ -1,13 +1,15 @@
 import 'reflect-metadata';
-import { Entrypoint, Pipeline, RawInput, RawStage, RetrievalStage } from './sdk/ingest.js';
+import { Candidates, Entrypoint, Pipeline, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
 
 @Pipeline('somepipeline')
 class SomePipeline {
 
   @Entrypoint()
-  entrypoint() {
-    const a = this.add(1,2);
-    this.retrieve(a);
+  async entrypoint() {
+    const a = await this.add(1,2);
+    const candidates = await this.retrieve(a);
+    const scored = await this.score(candidates as any[]);
+    console.log('scored', scored);
   }
 
 
@@ -16,12 +18,30 @@ class SomePipeline {
     return a + b;
   }
 
-  @RetrievalStage('retrieve')
-  retrieve(@RawInput('a') a: number): string[] {
+  @RetrievalStage('retrieve', {id: 'id'})
+  retrieve(@RawInput('a') a: number): {id: number, document: string}[] {
     return [
-      'some document',
-      'another document'
+      {
+        id:1,
+        document: 'some document',
+      },
+      {
+        id: 2,
+        document: 'another document',
+      }
     ]
+  }
+
+  @ScoringStage('score', { score: 'scorefield', id: 'id' })
+  score(@Candidates('candidates') candidates: any[]) {
+    // Dummy scoring: return an array with the specified id and score field names
+    return (candidates || []).map((c: any, i: number) => {
+      return {
+        id: c.id,
+        scorefield: Math.round(Math.random() * 100) / 100,
+        document: c.document,
+      };
+    });
   }
 }
 

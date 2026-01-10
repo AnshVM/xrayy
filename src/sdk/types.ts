@@ -1,5 +1,3 @@
-import mongoose, { Schema, Types, Document } from 'mongoose';
-
 export type Candidate = {
   candidate: any;
   id: string | number;
