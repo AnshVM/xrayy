@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import type { Stage } from './types.js';
+import type { Stage, Candidate } from './types.js';
 import type { Pipeline } from './pipeline.js';
 import { sendPipeline } from './api.js';
 
@@ -34,11 +34,12 @@ export function RawStage(label: string) {
 
       const startedAt = Date.now();
 
-      const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
 
       try {
         const output = await originalMethod.apply(this, args);
         const finishedAt = Date.now();
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
 
         const stage: Stage = {
           type: 'raw',
@@ -78,6 +79,89 @@ export function RawStage(label: string) {
             any: null
           }
         };
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+        throw err;
+      }
+    }
+
+    return descriptor;
+  }
+}
+
+export function RetrievalStage(label: string) {
+
+  return function(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
+
+    descriptor.value = async function(...args: any[]): Promise<Array<any>> {
+
+      const capturedParams: ParamCaptures = Reflect.getMetadata('xray:captures', target, propertyKey) || [];
+      let input: any = {};
+
+      for (const capturedParam of capturedParams) {
+        input[capturedParam.name] = args[capturedParam.index];
+      }
+
+      const startedAt = Date.now();
+
+      try {
+        const result:any[] = await originalMethod.apply(this, args);
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+        const finishedAt = Date.now();
+
+        if(!Array.isArray(result)) {
+          throw Error('Output for Retrieval Stage must be an array.');
+        }
+
+        const candidates: Candidate[] = result.map((c: any) => {
+          return { candidate: c } as Candidate;
+        });
+
+        const stage: Stage = {
+          type: 'retrieval',
+          label,
+          status: 'success',
+          startedAt,
+          finishedAt,
+          input: {
+            any: input
+          },
+          output: {
+            candidates
+          }
+        };
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+
+        return candidates;
+      } catch (err) {
+        const finishedAt = Date.now();
+
+        const stage: Stage = {
+          type: 'retrieval',
+          label,
+          status: 'failure',
+          error: {
+            message: String(err)
+          },
+          startedAt,
+          finishedAt,
+          input: {
+            any: input
+          },
+          output: {
+            candidates: []
+          }
+        };
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
 
         stages.push(stage);
 

@@ -32,12 +32,12 @@ export interface Stage {
   finishedAt: number;
 
   input: {
-    any: any;
+    any?: any;
     candidates?: Candidate[];
   };
 
   output: {
-    any: any;
+    any?: any;
 
     candidates?: Candidate[];
 
