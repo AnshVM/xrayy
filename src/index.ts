@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Candidates, Entrypoint, Pipeline, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
+import { Candidates, Entrypoint, FilteringStage, Pipeline, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
 
 @Pipeline('somepipeline')
 class SomePipeline {
@@ -9,6 +9,7 @@ class SomePipeline {
     const a = await this.add(1,2);
     const candidates = await this.retrieve(a);
     const scored = await this.score(candidates as any[]);
+    const filtered = await this.filter(scored);
     console.log('scored', scored);
   }
 
@@ -42,6 +43,19 @@ class SomePipeline {
         document: c.document,
       };
     });
+  }
+
+  @FilteringStage('filter', {id: 'id', passed: 'passed', reasonLabel: 'reason' })
+  filter(@Candidates('candidates') candidates: {id: number, scorefield: number, document: string}[]) {
+    return candidates.map(candidate => {
+      return {
+        id: candidate.id,
+        scoreField: candidate.scorefield,
+        document: candidate.document,
+        passed: candidate.scorefield > 0.5,
+        reasonLabel: candidate.scorefield > 0.5 ? 'high enough' : 'very low'
+      }
+    }) 
   }
 }
 

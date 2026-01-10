@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import type { Stage, Candidate, ScoredCandidate } from './types.js';
+import type { Stage, Candidate, ScoredCandidate, FilteredCandidate } from './types.js';
 import type { Pipeline } from './pipeline.js';
 import { sendPipeline } from './api.js';
 
@@ -92,6 +92,69 @@ export function validateAndConvertScoredCandidateInput(input: any[], idField: st
   });
 }
 
+export function validateAndConvertFilteredCandidates(
+  input: any[],
+  options: {
+    passed: string,
+    id: string,
+    reasonLabelField?: string,
+    reasonTextField?: string
+  }
+): Array<FilteredCandidate> {
+
+  const {passed: passedField, id: idField, reasonLabelField, reasonTextField} =  options;
+
+  if (!Array.isArray(input)) {
+    throw Error('Filtered candidate input must be an array.');
+  }
+
+  if (typeof idField !== 'string' || idField.length === 0) {
+    throw Error('idField must be a non-empty string.');
+  }
+
+  return input.map((it: any, i: number) => {
+    // idField must be present on each returned item
+    // if (!it || typeof it !== 'object' || !(idField in it)) {
+    //   throw Error(`Filtered candidate is missing required idField '${idField}' at index ${i}`);
+    // }
+    if (!(idField in it)) {
+      throw Error(`Filtered candidate is missing required idField '${idField}' at index ${i}`);
+    }
+
+    if (!(passedField in it)) {
+      throw Error(`Filtered candidate is missing required passedField '${passedField}' at index ${i}`);
+    }
+
+
+    const id = it[idField];
+    const passed = it[passedField]
+
+    let reasonLabel: string | undefined = undefined;
+    if (reasonLabelField) {
+      if (!(reasonLabelField in it)) {
+        throw Error(`No ${reasonLabelField} in Filtered candidate.`);
+      }
+      reasonLabel = it[reasonLabelField];
+    }
+
+    let reasonText: string | undefined = undefined;
+    if (reasonTextField) {
+      if (!(reasonTextField in it)) {
+        throw Error(`No ${reasonTextField} in Filtered candidate.`);
+      }
+      reasonText = it[reasonTextField];
+    }
+
+    return {
+      id,
+      passed,
+      reasonLabel,
+      reasonText,
+      candidate: it
+    };
+  });
+}
+
 export function RawStage(label: string) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
@@ -165,7 +228,7 @@ export function RawStage(label: string) {
   }
 }
 
-export function RetrievalStage(label: string, options: {id: string}) {
+export function RetrievalStage(label: string, options: { id: string }) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
@@ -189,7 +252,7 @@ export function RetrievalStage(label: string, options: {id: string}) {
           throw Error('Output for Retrieval Stage must be an array.');
         }
 
-        const candidates = validateAndConvertCandidateInput(result,options.id);
+        const candidates = validateAndConvertCandidateInput(result, options.id);
 
         const stage: Stage = {
           type: 'retrieval',
@@ -341,7 +404,100 @@ export function ScoringStage(label: string, options: { score: string; id: string
   }
 }
 
+export function FilteringStage(label: string, options: { id: string, passed: string, reasonLabel?: string, reasonText?: string }) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const originalMethod = descriptor.value;
 
+    descriptor.value = async function (...args: any[]) {
+      const capturedParams: ParamCaptures = Reflect.getMetadata('xray:captures', target, propertyKey) || [];
+      let input: any = {};
+
+      for (const capturedParam of capturedParams) {
+        if(capturedParam.type === 'candidates') continue;
+        input[capturedParam.name] = args[capturedParam.index];
+      }
+
+      const candidateParam = capturedParams.find(p => p.type === 'candidates');
+      if (!candidateParam) {
+        throw Error('Filtering stage must have a Candidates parameter.');
+      }
+
+      const candidateParamIndex = candidateParam.index;
+      const rawCandidates = args[candidateParamIndex];
+
+      if (!options || typeof options.id !== 'string') {
+        throw Error('FilteringStage requires an id field in options to convert inputs to Candidate.');
+      }
+
+      const convertedCandidates: Candidate[] = validateAndConvertCandidateInput(rawCandidates, options.id);
+
+      const startedAt = Date.now();
+
+      try {
+        const result: any[] = await originalMethod.apply(this, args);
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+        const finishedAt = Date.now();
+
+        if (!Array.isArray(result)) {
+          throw Error('Output for Filtering Stage must be an array.');
+        }
+
+        const filtered = validateAndConvertFilteredCandidates(result, options);
+
+        const stage: Stage = {
+          type: 'filtering',
+          label,
+          status: 'success',
+          startedAt,
+          finishedAt,
+          input: {
+            any: input,
+            candidates: convertedCandidates
+          },
+          output: {
+            filteredCandidates: filtered 
+          }
+        };
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+
+        // Do not alter original return value
+        return result;
+      } catch (err) {
+        const finishedAt = Date.now();
+
+        const stage: Stage = {
+          type: 'filtering',
+          label,
+          status: 'failure',
+          error: {
+            message: String(err)
+          },
+          startedAt,
+          finishedAt,
+          input: {
+            any: input,
+            candidates: convertedCandidates
+          },
+          output: {
+            filteredCandidates: []
+          }
+        };
+
+        const stages: Stage[] = Reflect.getMetadata('xray:stages', this.constructor) || [];
+
+        stages.push(stage);
+
+        Reflect.defineMetadata('xray:stages', stages, this.constructor);
+        throw err;
+      }
+    };
+
+    return descriptor;
+  };
+}
 
 export function Entrypoint() {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

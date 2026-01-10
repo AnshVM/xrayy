@@ -7,8 +7,8 @@ export type FilteredCandidate = {
   candidate: any;
   id: string | number;
   passed: boolean;
-  reasonLabel?: string;
-  reasonText?: string;
+  reasonLabel?: string | undefined;
+  reasonText?: string | undefined;
 };
 
 export type ScoredCandidate = {

@@ -6,3 +6,6 @@
 
 Issues could arise due to internal nameing conventions
 like candidate
+
+Bad things i did
+- Doing data transformations on client side
