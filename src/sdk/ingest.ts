@@ -77,8 +77,8 @@ export function validateAndConvertScoredCandidateInput(input: any[], idField: st
       id = (it as any)[idField];
     }
 
-    // Extract and coerce score
-    const rawScore = (it && typeof it === 'object' && scoreField in it) ? (it as any)[scoreField] : undefined;
+
+    const rawScore = it[scoreField];
     const score = Number(rawScore);
     if (Number.isNaN(score)) {
       throw Error(`Score field '${scoreField}' must be coercible to a number for item at index ${i}`);
@@ -687,9 +687,18 @@ export function Entrypoint() {
         const finishedAt = Date.now();
 
         const label = Reflect.getMetadata('xray:pipeline_label', this.constructor);
+        const idField = Reflect.getMetadata('xray:pipeline_idfield', this.constructor);
+
+        if(!idField) {
+          throw Error(`Missing required field: ${idField} in class required by Xray Pipeline`);
+        }
+
+        const id = (this as any)[idField as string];
+
         const stages = Reflect.getMetadata('xray:stages', this.constructor);
 
         const pipeline: Pipeline = {
+          id,
           label,
           startedAt,
           finishedAt,
@@ -705,7 +714,16 @@ export function Entrypoint() {
         const label = Reflect.getMetadata('xray:pipeline_label', this.constructor);
         const stages = Reflect.getMetadata('xray:stages', this.constructor);
 
+        const idField = Reflect.getMetadata('xray:pipeline_idfield', this.constructor);
+
+        if(!idField) {
+          throw Error(`Missing required field: ${idField} in class required by Xray Pipeline`);
+        }
+
+        const id = (this as any)[idField as string];
+
         const pipeline: Pipeline = {
+          id,
           label,
           startedAt,
           finishedAt,
@@ -725,9 +743,10 @@ export function Entrypoint() {
   }
 }
 
-export function Pipeline(label: string) {
+export function Pipeline(label: string, options: {id: string}) {
   return function (constructor: Function) {
     Reflect.defineMetadata('xray:pipeline_label', label, constructor);
+    Reflect.defineMetadata('xray:pipeline_idfield', options.id, constructor);
   }
 }
 

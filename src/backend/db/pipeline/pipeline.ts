@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export interface PipelineDocument extends Document {
+export type Pipeline = {
   id: string; // separate from _id
   label: string;
 
@@ -16,7 +16,7 @@ export interface PipelineDocument extends Document {
   duration: number;
 }
 
-const PipelineSchema = new Schema<PipelineDocument>({
+const PipelineSchema = new Schema<Pipeline>({
   id: { type: String, required: true, unique: true, index: true },
   label: { type: String, required: true, index: true },
   status: { type: String, required: true, enum: ['success', 'failure'], index: true },
@@ -29,4 +29,4 @@ const PipelineSchema = new Schema<PipelineDocument>({
   duration: { type: Number, required: true, index: true },
 });
 
-export const PipelineModel = mongoose.model<PipelineDocument>('Pipeline', PipelineSchema);
+export const PipelineModel = mongoose.model<Pipeline>('Pipeline', PipelineSchema);

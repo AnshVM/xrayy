@@ -1,8 +1,15 @@
 import 'reflect-metadata';
 import { Candidates, Entrypoint, FilteringStage, GenerationStage, Pipeline, RankingStage, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
+import { pipeline } from 'node:stream';
 
-@Pipeline('somepipeline')
+@Pipeline('somepipeline', {id: 'id'})
 class SomePipeline {
+
+  id: string;
+
+  constructor(id: string) {
+    this.id = id;
+  }
 
   @Entrypoint()
   async entrypoint() {
@@ -72,8 +79,8 @@ class SomePipeline {
   }
 }
 
-const pl = new SomePipeline();
-
+const pl = new SomePipeline('pipelin_001');
+  
 
 pl.entrypoint();
 

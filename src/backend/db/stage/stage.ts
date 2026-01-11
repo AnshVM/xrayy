@@ -9,8 +9,8 @@ export type FilteredCandidate = {
   id: string | number;
   candidate: any;
   passed: boolean;
-  reasonLabel?: string;
-  reasonText?: string;
+  reasonLabel: string | undefined;
+  reasonText: string | undefined;
 };
 
 export type ScoredCandidate = {
@@ -24,8 +24,8 @@ export type GeneratedCandidate = {
   reasonText: string | undefined;
 }
 
-export interface StageDocument extends Document {
-  type: 'retrieval' | 'scoring' | 'filtering' | 'generation' | 'raw';
+export type Stage = {
+  type: 'retrieval' | 'scoring' | 'filtering' | 'generation' | 'ranking' | 'raw';
 
   pipelineId: Types.ObjectId;
 
@@ -61,9 +61,11 @@ export interface StageDocument extends Document {
   metadata: {
     retrievalCount?: number;
 
-    filteringInputCount?: number;
-    filteringOutputCount?: number;
-    filteringRatio?: number;
+    filterInput?: number;
+    filterFailed?: number;
+    filterPassed?: number;
+    failRatio?: number;
+    passRatio?: number;
 
     generationModel?: string;
     tokensUsed?: number;
@@ -72,15 +74,22 @@ export interface StageDocument extends Document {
 
     highestScore?: number;
     lowestScore?: number;
-    medianScore?: number;
+    averageScore?: number;
 
     inputLength?: number;
     outputLength?: number;
+
+    averageRankShift?: number;
   };
 }
 
-const StageSchema = new Schema<StageDocument>({
-  type: { type: String, required: true, enum: ['retrieval', 'scoring', 'filtering', 'generation', 'raw'], index: true },
+const StageSchema = new Schema<Stage>({
+  type: {
+    type: String,
+    required: true,
+    enum: ['retrieval', 'scoring', 'filtering', 'generation', 'ranking', 'raw'],
+    index: true
+  },
 
   pipelineId: { type: Types.ObjectId, required: true, index: true },
 
@@ -100,7 +109,7 @@ const StageSchema = new Schema<StageDocument>({
   input: {
     any: Schema.Types.Mixed,
     candidates: [{
-      candidate: Schema.Types.Mixed, 
+      candidate: Schema.Types.Mixed,
       id: {
         type: Schema.Types.Union,
         of: [Number, String],
@@ -111,8 +120,8 @@ const StageSchema = new Schema<StageDocument>({
   output: {
     any: Schema.Types.Mixed,
 
-    candidates: [{ 
-      candidate: Schema.Types.Mixed, 
+    candidates: [{
+      candidate: Schema.Types.Mixed,
       id: {
         type: Schema.Types.Union,
         of: [Number, String],
@@ -150,9 +159,12 @@ const StageSchema = new Schema<StageDocument>({
     retrievalCount: { type: Number, index: true },
 
     // for filtering stage
-    filteringInputCount: { type: Number, index: true },
-    filteringOutputCount: { type: Number, index: true },
-    filteringRatio: { type: Number, index: true },
+    // for filtering stage (new fields)
+    filterInput: { type: Number, index: true },
+    filterFailed: { type: Number, index: true },
+    filterPassed: { type: Number, index: true },
+    failRatio: { type: Number, index: true },
+    passRatio: { type: Number, index: true },
 
     // for generation stages
     generationModel: { type: String, index: true },
@@ -163,11 +175,14 @@ const StageSchema = new Schema<StageDocument>({
     // for scoring stages
     highestScore: { type: Number, index: true },
     lowestScore: { type: Number, index: true },
-    medianScore: { type: Number, index: true },
+    averageScore: { type: Number, index: true },
 
     inputLength: { type: Number, index: true },
     outputLength: { type: Number, index: true },
+
+    // for ranking stage
+    averageRankShift: { type: Number, index: true },
   },
 });
 
-export const StageModel = mongoose.model<StageDocument>('Stage', StageSchema);
+export const StageModel = mongoose.model<Stage>('Stage', StageSchema);
