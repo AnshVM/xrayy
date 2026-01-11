@@ -53,10 +53,6 @@ export async function runQuery(queryInput: QueryInputFilter) {
       const pipelines = await PipelineModel.aggregate([
         { $match: queryInput.pipeline },
         joinStages(),
-        {$project: {
-          'stages.input': -1,
-          'stages.output': -1,
-        }}
       ]);
       return pipelines;
     }
@@ -87,10 +83,6 @@ export async function runQuery(queryInput: QueryInputFilter) {
       }
     },
     joinStages(),
-    {$project: {
-      'stages.input': false,
-      'stages.output': false
-    }}
   ]);
 
   return pipelines;
