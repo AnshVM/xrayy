@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
-import type { Pipeline } from "./pipeline.js";
+import type { Pipeline } from "./schema/pipeline.js";
+import type { QueryInputFilter } from './schema/query.js';
 
 dotenv.config();
 
@@ -27,5 +28,34 @@ export async function sendPipeline(pipeline: Pipeline) {
     }
   } catch (err) {
     console.error('sendPipeline error:', String(err));
+  }
+}
+
+
+
+export async function runQuery(query: QueryInputFilter) {
+  const url = `${XRAY_BACKEND}/query`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(query),
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(`runQuery failed: ${res.status} ${res.statusText}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  } catch (err) {
+    console.error('runQuery error:', String(err));
+    throw err;
   }
 }

@@ -228,10 +228,87 @@ const dummyCatalog: Product[] = [
   }
 ]
 
+// Alternate dummy catalog with different count, prices, ratings, categories
+const dummyCatalogAlt: Product[] = [
+  {
+    id: "a1",
+    title: "Premium ANC Over-Ear Headphones",
+    category: "Electronics",
+    price: 220,
+    rating: 4.8,
+    reviewCount: 5400
+  },
+  {
+    id: "a2",
+    title: "Budget Wireless Headphones",
+    category: "Electronics",
+    price: 45,
+    rating: 3.9,
+    reviewCount: 120
+  },
+  {
+    id: "a3",
+    title: "Sports Bluetooth Earphones",
+    category: "Wearables",
+    price: 65,
+    rating: 4.2,
+    reviewCount: 760
+  },
+  {
+    id: "a4",
+    title: "Studio Reference Headphones Wired",
+    category: "Electronics",
+    price: 180,
+    rating: 4.7,
+    reviewCount: 430
+  },
+  {
+    id: "a5",
+    title: "Compact True Wireless Earbuds",
+    category: "Electronics",
+    price: 95,
+    rating: 4.0,
+    reviewCount: 1500
+  },
+  {
+    id: "a6",
+    title: "Vintage Wired Headphones",
+    category: "Accessories",
+    price: 55,
+    rating: 3.6,
+    reviewCount: 45
+  },
+  {
+    id: "a7",
+    title: "Noise Reduction Headset Pro Plus",
+    category: "Electronics",
+    price: 140,
+    rating: 4.3,
+    reviewCount: 980
+  },
+  {
+    id: "a8",
+    title: "Minimalist On-Ear Headphones",
+    category: "Electronics",
+    price: 75,
+    rating: 3.8,
+    reviewCount: 210
+  }
+]
+
 // --------------------
 // Example Run
 // --------------------
+const sellerProductAlt: Product = {
+  id: "seller-2",
+  title: "Compact True Wireless Earbuds",
+  category: "Electronics",
+  price: 99,
+  rating: 4.2,
+  reviewCount: 1800
+}
 
+// alias used by the later call to `pipeline.run(seller)`
 const sellerProduct: Product = {
   id: "seller-1",
   title: "Wireless Noise Cancelling Headphones",
@@ -241,5 +318,8 @@ const sellerProduct: Product = {
   reviewCount: 400
 }
 
-const pipeline = new CompetitorSelectionPipeline(dummyCatalog,'pipeline_0001' )
-pipeline.run(sellerProduct)
+// const pipeline = new CompetitorSelectionPipeline(dummyCatalog,'pipeline_0001' )
+// pipeline.run(sellerProduct)
+
+const pipeline_alt= new CompetitorSelectionPipeline(dummyCatalogAlt, 'pipeline_0002');
+await pipeline_alt.run(sellerProductAlt)

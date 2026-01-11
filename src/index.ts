@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Candidates, Entrypoint, FilteringStage, GenerationStage, Pipeline, RankingStage, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
 import { pipeline } from 'node:stream';
+import { runQuery } from './sdk/api.js';
 
 @Pipeline('somepipeline', {id: 'id'})
 class SomePipeline {
@@ -79,9 +80,14 @@ class SomePipeline {
   }
 }
 
-const pl = new SomePipeline('pipelin_001');
-  
+const pipelines = await runQuery(
+  {
+    stage: {
+      type: 'retrieval',
+      $retrievalCount: 3
+    }
+  }
+)
 
-pl.entrypoint();
-
+console.log(JSON.stringify(pipelines,null,2));
 

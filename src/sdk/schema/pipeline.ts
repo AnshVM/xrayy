@@ -1,4 +1,4 @@
-import type { Stage } from "./types.js";
+import type { Stage } from "./stage.js";
 
 export interface Pipeline {
   id: string;

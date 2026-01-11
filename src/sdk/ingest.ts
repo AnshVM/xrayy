@@ -1,6 +1,6 @@
 import 'reflect-metadata';
-import type { Stage, Candidate, ScoredCandidate, FilteredCandidate, GeneratedCandidate } from './types.js';
-import type { Pipeline } from './pipeline.js';
+import type { Stage, Candidate, ScoredCandidate, FilteredCandidate, GeneratedCandidate } from './schema/stage.js';
+import type { Pipeline } from './schema/pipeline.js';
 import { sendPipeline } from './api.js';
 
 type ParamCaptures = {
