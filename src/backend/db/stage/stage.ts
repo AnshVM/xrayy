@@ -2,9 +2,11 @@ import mongoose, { Schema, Types, Document } from 'mongoose';
 
 export type Candidate = {
   candidate: any;
+  id: string | number;
 };
 
 export type FilteredCandidate = {
+  id: string | number;
   candidate: any;
   passed: boolean;
   reasonLabel?: string;
@@ -12,9 +14,15 @@ export type FilteredCandidate = {
 };
 
 export type ScoredCandidate = {
+  id: string | number;
   candidate: any;
   score: number;
 };
+
+export type GeneratedCandidate = {
+  candidate: any;
+  reasonText: string | undefined;
+}
 
 export interface StageDocument extends Document {
   type: 'retrieval' | 'scoring' | 'filtering' | 'generation' | 'raw';
@@ -35,18 +43,12 @@ export interface StageDocument extends Document {
   duration: number;
 
   input: {
-    json?: any;
-    str?: string;
-    num?: number;
-    bool?: boolean;
+    any?: any,
     candidates?: Candidate[];
   };
 
   output: {
-    json?: any;
-    str?: string;
-    num?: number;
-    bool?: boolean;
+    any?: any,
 
     candidates?: Candidate[];
 
@@ -54,10 +56,7 @@ export interface StageDocument extends Document {
 
     scoredCandidates?: ScoredCandidate[];
 
-    generatedCandidates?: {
-      candidate: any;
-      reasonText?: string;
-    }[];
+    generatedCandidates?: GeneratedCandidate[];
   };
   metadata: {
     retrievalCount?: number;
@@ -99,22 +98,32 @@ const StageSchema = new Schema<StageDocument>({
   duration: { type: Number, required: true, index: true },
 
   input: {
-    json: Schema.Types.Mixed,
-    str: String,
-    num: Number,
-    bool: Boolean,
-    candidates: [{ candidate: Schema.Types.Mixed }],
+    any: Schema.Types.Mixed,
+    candidates: [{
+      candidate: Schema.Types.Mixed, 
+      id: {
+        type: Schema.Types.Union,
+        of: [Number, String],
+      }
+    }],
   },
 
   output: {
-    json: Schema.Types.Mixed,
-    str: String,
-    num: Number,
-    bool: Boolean,
+    any: Schema.Types.Mixed,
 
-    candidates: [{ candidate: Schema.Types.Mixed }],
+    candidates: [{ 
+      candidate: Schema.Types.Mixed, 
+      id: {
+        type: Schema.Types.Union,
+        of: [Number, String],
+      }
+    }],
 
     filteredCandidates: [{
+      id: {
+        type: Schema.Types.Union,
+        of: [Number, String],
+      },
       candidate: Schema.Types.Mixed,
       passed: Boolean,
       reasonLabel: String,
@@ -122,6 +131,10 @@ const StageSchema = new Schema<StageDocument>({
     }],
 
     scoredCandidates: [{
+      id: {
+        type: Schema.Types.Union,
+        of: [Number, String],
+      },
       candidate: Schema.Types.Mixed,
       score: { type: Number, index: true },
     }],
@@ -146,7 +159,7 @@ const StageSchema = new Schema<StageDocument>({
     tokensUsed: { type: Number, index: true },
     prompt: { type: String, index: true },
     candidatesGenerated: { type: Number, index: true },
-    
+
     // for scoring stages
     highestScore: { type: Number, index: true },
     lowestScore: { type: Number, index: true },
