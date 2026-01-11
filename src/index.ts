@@ -1,93 +1,355 @@
-import 'reflect-metadata';
-import { Candidates, Entrypoint, FilteringStage, GenerationStage, Pipeline, RankingStage, RawInput, RawStage, RetrievalStage, ScoringStage } from './sdk/ingest.js';
-import { pipeline } from 'node:stream';
-import { runQuery } from './sdk/api.js';
+// --------------------
+// Types
+// --------------------
 
-@Pipeline('somepipeline', {id: 'id'})
-class SomePipeline {
+import { runQuery } from "./sdk/api.js"
+import { 
+  Candidates, 
+  Entrypoint, 
+  FilteringStage, 
+  GenerationStage, 
+  Pipeline, 
+  RankingStage, 
+  RawInput, RawStage, RetrievalStage, ScoringStage } from "./sdk/ingest.js"
 
-  id: string;
+type Product = {
+  id: string
+  title: string
+  category: string
+  price: number
+  rating: number
+  reviewCount: number
+}
 
-  constructor(id: string) {
+type RankedProduct = Product & {
+  relevanceScore: number
+}
+
+// --------------------
+// Pipeline Class
+// --------------------
+
+@Pipeline('CompetitorSelectionPipeline', { id: 'id' })
+class CompetitorSelectionPipeline {
+  private catalog: Product[]
+  private id: string;
+
+  constructor(catalog: Product[], id: string) {
+    this.catalog = catalog
     this.id = id;
   }
 
+  // --------------------
+  // Entrypoint
+  // --------------------
+
   @Entrypoint()
-  async entrypoint() {
-    const a = await this.add(1,2);
-    const candidates = await this.retrieve(a);
-    const scored = await this.score(candidates as any[]);
-    const ranked = await this.ranking(scored);
-    return ranked;
-    // const filtered = await this.filter(scored);
-    // const gen = this.generation(filtered);
-    // console.log('scored', scored);
+  public async run(sellerProduct: Product): Promise<Product | null> {
+    console.log("Seller product:", sellerProduct)
+
+    const keywords = await this.generateSearchKeywords(sellerProduct)
+    console.log("Generated keywords:", keywords)
+
+    const candidates = await this.retrieveCandidates(keywords)
+    console.log(`Retrieved ${candidates.length} candidates`)
+
+    let filtered = await this.applyHardFilters(sellerProduct, candidates)
+    filtered = filtered.filter(f => f.passed);
+    console.log(`After hard filters: ${filtered.length}`)
+
+    const reranked = await this.llmReRankCandidates(sellerProduct, filtered)
+    console.log("Top 5 after LLM rerank:", reranked.slice(0, 5))
+
+    const cleaned = await this.llmEliminateFalsePositives(sellerProduct, reranked)
+    console.log(`After LLM false-positive removal: ${cleaned.length}`)
+
+    const best = await this.selectBestCompetitor(cleaned)
+    console.log("Selected competitor:", best)
+
+    return best
   }
 
+  // --------------------
+  // Step 1: LLM keyword generation (non-deterministic)
+  // --------------------
 
-  @RawStage('first')
-  add(@RawInput('a') a: number, @RawInput('b') b: number) {
-    return a + b;
-  }
-
-  @RetrievalStage('retrieve', {id: 'id'})
-  retrieve(@RawInput('a') a: number): {id: number, document: string}[] {
-    return [
-      {
-        id:1,
-        document: 'some document',
-      },
-      {
-        id: 2,
-        document: 'another document',
-      }
+  @GenerationStage("generate-search-keywords", {})
+  private generateSearchKeywords(@RawInput('product') product: Product): string[] {
+    const baseKeywords = [
+      ...product.title.toLowerCase().split(" "),
+      product.category.toLowerCase()
     ]
+
+    // Simulate LLM randomness
+    const noise = ["best", "cheap", "premium", "2025", "top"]
+    const randomExtras = noise.sort(() => 0.5 - Math.random()).slice(0, 2)
+
+    return Array.from(new Set([...baseKeywords, ...randomExtras]))
   }
 
-  @ScoringStage('score', { score: 'scorefield', id: 'id' })
-  score(@Candidates('candidates') candidates: any[]) {
-    // Dummy scoring: return an array with the specified id and score field names
-    return (candidates || []).map((c: any, i: number) => {
-      return {
-        id: c.id,
-        scorefield: Math.round(Math.random() * 100) / 100,
-        document: c.document,
-      };
-    });
+  // --------------------
+  // Step 2: Retrieve candidates (simulated API)
+  // --------------------
+
+  @RetrievalStage('retrieve-candidates', { id: 'id' })
+  private retrieveCandidates(@RawInput('keywords') keywords: string[]): Product[] {
+    return this.catalog.filter(p =>
+      keywords.some(k => p.title.toLowerCase().includes(k))
+    )
   }
 
-  @FilteringStage('filter', {id: 'id', passed: 'passed', reasonLabel: 'reason' })
-  filter(@Candidates('candidates') candidates: {id: number, scorefield: number, document: string}[]) {
-    return candidates.map(candidate => {
+  // --------------------
+  // Step 3: Hard filters (deterministic)
+  // --------------------
+
+
+  @FilteringStage('filtering', { id: 'id', passed: 'passed' })
+  private applyHardFilters(
+    @RawInput('product') seller: Product,
+    @Candidates('candidates') candidates: Product[]
+  ): (Product & { passed: boolean })[] {
+    return candidates.map(p => {
+      const priceOk =
+        p.price >= seller.price * 0.7 &&
+        p.price <= seller.price * 1.3
+
+      const ratingOk = p.rating >= 3.5
+      const reviewsOk = p.reviewCount >= 50
+      const categoryOk = p.category === seller.category
+
+      const passed = priceOk && ratingOk && reviewsOk && categoryOk
       return {
-        id: candidate.id,
-        scoreField: candidate.scorefield,
-        document: candidate.document,
-        passed: candidate.scorefield > 0.5,
-        reason: candidate.scorefield > 0.5 ? 'high enough' : 'very low'
+        ...p,
+        passed,
       }
-    }) 
+    })
   }
 
-  @GenerationStage('generation', {reason: 'reason'})
-  generation(@RawInput('candidates') candidates: {document: string, reason: string}[]) {
-    return candidates;
+  // --------------------
+  // Step 4: LLM re-ranking (non-deterministic)
+  // --------------------
+
+  @RankingStage('llm-re-rank-candidates', { id: 'id' })
+  private llmReRankCandidates(
+    @RawInput('product') seller: Product,
+    @Candidates('candidates') candidates: Product[]
+  ): RankedProduct[] {
+    return candidates
+      .map(p => ({
+        ...p,
+        relevanceScore: this.simulateLLMRelevanceScore(seller, p)
+      }))
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
   }
 
-  @RankingStage('ranking', {id: 'id'}) 
-  ranking(@Candidates('candidates') candidates: any[]) {
-    return candidates;
+  private simulateLLMRelevanceScore(
+    seller: Product,
+    candidate: Product
+  ): number {
+    let score = 0
+
+    // Title similarity (very rough heuristic)
+    seller.title.split(" ").forEach(word => {
+      if (candidate.title.includes(word)) score += 1
+    })
+
+    // Price closeness
+    score += 1 - Math.abs(candidate.price - seller.price) / seller.price
+
+    // Random LLM noise
+    score += Math.random() * 0.5
+
+    return Number(score.toFixed(2))
+  }
+
+  // --------------------
+  // Step 5: LLM false positive elimination (non-deterministic)
+  // --------------------
+
+  @RawStage('eliminate-false-positives')
+  private llmEliminateFalsePositives(
+    @RawInput('seller') seller: Product,
+    @RawInput('candidates') candidates: RankedProduct[]
+  ): RankedProduct[] {
+    return candidates.filter(c => {
+      // Simulate LLM judgment with randomness
+      const probabilityRelevant = c.relevanceScore / 5
+      return Math.random() < probabilityRelevant
+    })
+  }
+
+  // --------------------
+  // Step 6: Final selection
+  // --------------------
+
+  private selectBestCompetitor(
+    candidates: RankedProduct[]
+  ): Product | null {
+    if (candidates.length === 0) return null
+    return candidates[0] as Product;
   }
 }
 
-const pipelines = await runQuery(
+// --------------------
+// Dummy Data
+// --------------------
+
+const dummyCatalog: Product[] = [
   {
-    stage: {
-      type: 'retrieval',
-      $retrievalCount: 3
-    }
+    id: "p1",
+    title: "Wireless Noise Cancelling Headphones",
+    category: "Electronics",
+    price: 120,
+    rating: 4.4,
+    reviewCount: 1200
+  },
+  {
+    id: "p2",
+    title: "Bluetooth Over Ear Headphones",
+    category: "Electronics",
+    price: 110,
+    rating: 4.1,
+    reviewCount: 800
+  },
+  {
+    id: "p3",
+    title: "Wired Studio Headphones",
+    category: "Electronics",
+    price: 90,
+    rating: 4.6,
+    reviewCount: 300
+  },
+  {
+    id: "p4",
+    title: "Wireless Earbuds",
+    category: "Electronics",
+    price: 70,
+    rating: 4.0,
+    reviewCount: 2000
+  },
+  {
+    id: "p5",
+    title: "Noise Cancelling Headphones Pro",
+    category: "Electronics",
+    price: 130,
+    rating: 4.5,
+    reviewCount: 950
   }
-)
+]
 
-console.log(JSON.stringify(pipelines,null,2));
+// Alternate dummy catalog with different count, prices, ratings, categories
+const dummyCatalogAlt: Product[] = [
+  {
+    id: "a1",
+    title: "Premium ANC Over-Ear Headphones",
+    category: "Electronics",
+    price: 220,
+    rating: 4.8,
+    reviewCount: 5400
+  },
+  {
+    id: "a2",
+    title: "Budget Wireless Headphones",
+    category: "Electronics",
+    price: 45,
+    rating: 3.9,
+    reviewCount: 120
+  },
+  {
+    id: "a3",
+    title: "Sports Bluetooth Earphones",
+    category: "Wearables",
+    price: 65,
+    rating: 4.2,
+    reviewCount: 760
+  },
+  {
+    id: "a4",
+    title: "Studio Reference Headphones Wired",
+    category: "Electronics",
+    price: 180,
+    rating: 4.7,
+    reviewCount: 430
+  },
+  {
+    id: "a5",
+    title: "Compact True Wireless Earbuds",
+    category: "Electronics",
+    price: 95,
+    rating: 4.0,
+    reviewCount: 1500
+  },
+  {
+    id: "a6",
+    title: "Vintage Wired Headphones",
+    category: "Accessories",
+    price: 55,
+    rating: 3.6,
+    reviewCount: 45
+  },
+  {
+    id: "a7",
+    title: "Noise Reduction Headset Pro Plus",
+    category: "Electronics",
+    price: 140,
+    rating: 4.3,
+    reviewCount: 980
+  },
+  {
+    id: "a8",
+    title: "Minimalist On-Ear Headphones",
+    category: "Electronics",
+    price: 75,
+    rating: 3.8,
+    reviewCount: 210
+  }
+]
 
+// --------------------
+// Example Run
+// --------------------
+const sellerProductAlt: Product = {
+  id: "seller-2",
+  title: "Compact True Wireless Earbuds",
+  category: "Electronics",
+  price: 99,
+  rating: 4.2,
+  reviewCount: 1800
+}
+
+// alias used by the later call to `pipeline.run(seller)`
+const sellerProduct: Product = {
+  id: "seller-1",
+  title: "Wireless Noise Cancelling Headphones",
+  category: "Electronics",
+  price: 115,
+  rating: 4.3,
+  reviewCount: 400
+}
+
+// const pipeline = new CompetitorSelectionPipeline(dummyCatalog,'pipeline_0001' )
+// pipeline.run(sellerProduct)
+
+// const pipeline_alt = new CompetitorSelectionPipeline(dummyCatalogAlt, 'pipeline_0002');
+// await pipeline_alt.run(sellerProductAlt)
+
+// const result = await runQuery({
+//   pipeline: {
+//     id: 'pipeline_0001'
+//   },
+// })
+// console.log(result);
+
+const result = await runQuery({
+  pipeline: {
+    // id: 'pipeline_0001'
+    label: 'CompetitorSelectionPipeline'
+  },
+  stage: {
+    type: 'retrieval',
+    // $retrievalCount: 6
+    $retrievalCount: 6
+  }
+})
+
+console.log(result);
