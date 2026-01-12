@@ -1,11 +1,16 @@
 # xrayy
 
+### Tech stack
+```Nodejs, MongoDB``
+
 ## Setup
 
 1. Install dependencies:
 ```sh
    npm install
 ```
+
+**You also need to have a running instance of MongoDB**
 
 2. Create a `.env` file in the project root:
 ```env
